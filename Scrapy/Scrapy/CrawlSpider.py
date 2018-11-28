@@ -1,19 +1,20 @@
-from scrapy.contrib.spiders import CrawlSpider, Rule
-from scrapy.contrib.linkextractors import LinkExtractor
+import scrapy
 
 
-class TestSpider(CrawlSpider):
+class StackOverflowSpider(scrapy.Spider):
+    name = 'stackoverflow'
+    start_urls = ['http://stackoverflow.com/questions?sort=votes']
 
-    name = 'TestSpider'
-    allowed_domains = ['mininova.org']
-    start_urls = ['http://www.mininova.org/today']
-    rules = [Rule(LinkExtractor(allow=['/tor/\d+']), 'parse_torrent')]
+    def parse(self, response):
+        for href in response.css('.question-summary h3 a::attr(href)'):
+            full_url = response.urljoin(href.extract())
+            yield scrapy.Request(full_url, callback=self.parse_question)
 
-    def parse_torrent(self, response):
-        from Scrapy.Scrapy.items import ScrapyItem
-        torrent = ScrapyItem()
-        torrent['url'] = response.url
-        torrent['name'] = response.xpath("//h1/text()").extract()
-        torrent['description'] = response.xpath("//div[@id='description']").extract()
-        torrent['size'] = response.xpath("//div[@id='specifications']/p[2]/text()[2]").extract()
-        return torrent
+    def parse_question(self, response):
+        yield {
+            'title': response.css('h1 a::text').extract()[0],
+            'votes': response.css('.question .vote-count-post::text').extract()[0],
+            'body': response.css('.question .post-text').extract()[0],
+            'tags': response.css('.question .post-tag::text').extract(),
+            'link': response.url,
+        }
